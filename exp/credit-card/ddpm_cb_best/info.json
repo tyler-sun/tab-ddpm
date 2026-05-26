@@ -1,0 +1,10 @@
+{
+  "name": "credit-card",
+  "id": "credit-card--id",
+  "task_type": "binclass",
+  "n_num_features": 30,
+  "n_cat_features": 0,
+  "train_size": 185124,
+  "val_size": 42721,
+  "test_size": 56962
+}

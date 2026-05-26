@@ -48,10 +48,12 @@ def train_catboost(
 
         X_num = None
         if X_num_real is not None:
+            print("merging numerical features...")
             X_num = np.concatenate([X_num_real, X_num_fake], axis=0)
 
         X_cat = None
         if X_cat_real is not None:
+            print("merging categorical features...")
             X_cat = np.concatenate([X_cat_real, X_cat_fake], axis=0)
 
     elif eval_type == 'synthetic':

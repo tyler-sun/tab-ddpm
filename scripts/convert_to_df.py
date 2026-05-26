@@ -32,24 +32,35 @@ def convert_to_df(ds_name="adult", sampling_method="ddpm", eval_type="synthetic"
         y_file = parent_path / model_folder / f'y{file_details}.npy'
     
     print(f"Loading data from: {X_cat_file}, {X_num_file}, {y_file}")
+    cat_data, num_data, y_data = None, None, None
+    df_array = []
     if X_cat_file.exists():
         cat_data = np.load(X_cat_file, allow_pickle=True)
+        df_array.append(cat_data)
     else:
         print("Unable to find categorical data file.")
-        return None
     if X_num_file.exists():
         num_data = np.load(X_num_file, allow_pickle=True)
+        df_array.append(num_data)
     else:
         print("Unable to find numerical data file.")
-        return None
     if y_file.exists():
         y_data = np.load(y_file, allow_pickle=True)
+        df_array.append(y_data.reshape(-1, 1))
     else:
         print("Unable to find target data file.")
         return None
-    array = np.hstack([cat_data, num_data, y_data.reshape(-1, 1)])
+    df_stack = np.hstack(df_array)
 
-    df = pd.DataFrame(array, columns=[f'cat_{i}' for i in range(cat_data.shape[1])] + [f'num_{i}' for i in range(num_data.shape[1])] + ['target'])
+    column_headers = []
+    if cat_data is not None:
+        column_headers += [f'cat_{i}' for i in range(cat_data.shape[1])]
+    if num_data is not None:
+        column_headers += [f'num_{i}' for i in range(num_data.shape[1])]
+    if y_data is not None:
+        column_headers += ['target']
+
+    df = pd.DataFrame(df_stack, columns=column_headers)
     print("Created dataframe with shape", df.shape)
     print("Sample from dataframe:", df.head())
     return df
