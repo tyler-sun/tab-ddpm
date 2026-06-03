@@ -6,6 +6,7 @@ from train import train
 from sample import sample
 from sample_1_class import sample_1_class
 from eval_catboost import train_catboost
+from eval_xgboost import train_xgboost
 from eval_mlp import train_mlp
 from eval_simple import train_simple
 import pandas as pd
@@ -92,13 +93,24 @@ def main():
             device=device,
             seed=raw_config['sample'].get('seed', 0),
             change_val=args.change_val,
-            fixed_class=args.sample_1
+            fixed_class=args.sample_1,
+            boundary_filter=raw_config['sample'].get('boundary_filter', False),
+            classifier=raw_config['eval']['type']['eval_model']
         )
 
     save_file(os.path.join(raw_config['parent_dir'], 'info.json'), os.path.join(raw_config['real_data_path'], 'info.json'))
     if args.eval:
         if raw_config['eval']['type']['eval_model'] == 'catboost':
             train_catboost(
+                parent_dir=raw_config['parent_dir'],
+                real_data_path=raw_config['real_data_path'],
+                eval_type=raw_config['eval']['type']['eval_type'],
+                T_dict=raw_config['eval']['T'],
+                seed=raw_config['seed'],
+                change_val=args.change_val
+            )
+        if raw_config['eval']['type']['eval_model'] == 'xgboost':
+            train_xgboost(
                 parent_dir=raw_config['parent_dir'],
                 real_data_path=raw_config['real_data_path'],
                 eval_type=raw_config['eval']['type']['eval_type'],

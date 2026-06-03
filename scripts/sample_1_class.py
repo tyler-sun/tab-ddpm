@@ -6,6 +6,10 @@ from tab_ddpm.gaussian_multinomial_diffsuion import GaussianMultinomialDiffusion
 from utils_train import get_model, make_dataset
 from lib import round_columns
 import lib
+from xgboost import XGBClassifier
+from catboost import CatBoostClassifier
+from skorch.classifier import NeuralNetClassifier
+from lib import concat_features, get_catboost_config, concat_to_df
 
 def to_good_ohe(ohe, X):
     indices = np.cumsum([0] + ohe._n_features_outs)
@@ -33,7 +37,9 @@ def sample_1_class(
     device = torch.device('cuda:1'),
     seed = 0,
     change_val = False,
-    fixed_class = 1
+    fixed_class = 1,
+    boundary_filter = False,
+    classifier = "catboost"
 ):
     zero.improve_reproducibility(seed)
 
@@ -136,14 +142,62 @@ def sample_1_class(
     #     )
     X_gen, y_gen = x_gen.numpy(), y_gen.numpy()
 
-    ###
-    # X_num_unnorm = X_gen[:, :num_numerical_features]
-    # lo = np.percentile(X_num_unnorm, 2.5, axis=0)
-    # hi = np.percentile(X_num_unnorm, 97.5, axis=0)
-    # idx = (lo < X_num_unnorm) & (hi > X_num_unnorm)
-    # X_gen = X_gen[np.all(idx, axis=1)]
-    # y_gen = y_gen[np.all(idx, axis=1)]
-    ###
+    # use xgboost classifier as catboost and mlp are already used for the final evaluation?
+    # config_path = lib.load_config(parent_dir / "config.toml")
+    #classifier = XGBClassifier(
+    # classifier = CatBoostClassifier(
+    #     loss_function="MultiClass" if D.is_multiclass else "Logloss",
+    #     **config['eval']['model_params'],
+    #     eval_metric='TotalF1',
+    #     random_seed=seed,
+    #     class_names=[str(i) for i in range(D.n_classes)] if D.is_multiclass else ["0", "1"]
+    # )
+    # if classifier == "xgboost":
+    #     boundary_clf = XGBClassifier(
+    #         **config['eval']['model_params'],
+    #         eval_metric='logloss',
+    #         random_seed=seed,
+    #         use_label_encoder=False
+    #     )
+    # elif
+    if boundary_filter:
+        if classifier == "catboost":
+            catboost_config = get_catboost_config(real_data_path, is_cv=True)
+            boundary_clf = CatBoostClassifier(
+                loss_function="MultiClass" if D.is_multiclass else "Logloss",
+                **catboost_config,
+                eval_metric='TotalF1',
+                random_seed=seed,
+                class_names=[str(i) for i in range(D.n_classes)] if D.is_multiclass else ["0", "1"]
+            )
+    # elif classifier == "mlp":
+    #     boundary_clf = NeuralNetClassifier(
+    #         model,
+    #         criterion=BCEWithLogitsLoss if D.is_binclass else CrossEntropyLoss,
+    #         optimizer=AdamW,
+    #         lr=params["lr"],
+    #         optimizer__weight_decay=params["weight_decay"],
+    #         batch_size=128 if len(D.y["train"]) < 10_000 else 256,
+    #         max_epochs=1000,
+    #         train_split=predefined_split(val_ds),
+    #         iterator_train__shuffle=True,
+    #         device=device,
+    #         callbacks=[es, EpochScoring(f1, lower_is_better=False)],
+    #     )
+
+        # filter for samples close to the decision boundary
+        X = concat_features(D)
+        boundary_clf.fit(X['train'], D.y['train'])
+
+        X_gen_catboost = concat_to_df(D, X_gen)
+        probs = boundary_clf.predict_proba(X_gen_catboost)[:, 1]
+
+        threshold = 0.5
+        margin = np.abs(probs - threshold)
+        boundary_indices = margin < 0.3
+        X_gen = X_gen[boundary_indices]
+        y_gen = y_gen[boundary_indices]
+        print(f"Filtered to {X_gen.shape[0]} samples close to the decision boundary")
 
     num_numerical_features = num_numerical_features + int(D.is_regression and not model_params["is_y_cond"])
 

@@ -707,6 +707,22 @@ def read_changed_val(path, val_size=0.2):
     
     return X_num_train, X_cat_train, y_train, X_num_val, X_cat_val, y_val
 
+def concat_to_df(D, X_gen):
+    n_num = D.n_num_features
+    n_cat = D.n_cat_features
+    cols = []
+    dfs = []
+    if n_num > 0:
+        dfs.append(pd.DataFrame(X_gen[:, :n_num], columns=range(n_num)))
+        cols += list(range(n_num))
+    if n_cat > 0:
+        dfs.append(pd.DataFrame(X_gen[:, n_num:n_num+n_cat], columns=range(n_num, n_num+n_cat)))
+        cols += list(range(n_num, n_num+n_cat))
+    if dfs:
+        return pd.concat(dfs, axis=1)[cols]
+    else:
+        return pd.DataFrame()  # empty
+
 #############
 
 def load_dataset_info(dataset_dir_name: str) -> Dict[str, Any]:

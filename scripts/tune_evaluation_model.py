@@ -3,6 +3,7 @@ import lib
 import argparse
 from eval_catboost import train_catboost
 from eval_mlp import train_mlp
+from eval_xgboost import train_xgboost
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
@@ -76,6 +77,18 @@ def suggest_catboost_params(trial):
 
     return params
 
+def suggest_xg_params(trial):
+    params = {}
+    params["learning_rate"] = trial.suggest_loguniform("learning_rate", 0.001, 0.1)
+    params["max_depth"] = trial.suggest_int("max_depth", 3, 10)
+    params["n_estimators"] = trial.suggest_int("n_estimators", 500, 5000)
+    params["subsample"] = trial.suggest_uniform("subsample", 0.5, 1.0)
+    params["scale_pos_weight"] = trial.suggest_uniform("scale_pos_weight", 0.5, 2.0)
+    params["colsample_bytree"] = trial.suggest_uniform("colsample_bytree", 0.5, 1.0)
+    params["min_child_weight"] = trial.suggest_int("min_child_weight", 1, 10)
+
+    return params
+
 def objective(trial):
     if args.model == "mlp":
         params = suggest_mlp_params(trial)
@@ -87,6 +100,18 @@ def objective(trial):
             "cat_nan_policy": None,
             "cat_min_frequency": None,
             "cat_encoding": "one-hot",
+            "y_policy": "default"
+        }
+    elif args.model == "xgboost":
+        params = suggest_xg_params(trial)
+        train_func = train_xgboost
+        T_dict = {
+            "seed": 0,
+            "normalization": None,
+            "num_nan_policy": None,
+            "cat_nan_policy": None,
+            "cat_min_frequency": None,
+            "cat_encoding": None,
             "y_policy": "default"
         }
     else:

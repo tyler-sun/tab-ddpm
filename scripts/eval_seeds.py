@@ -9,6 +9,7 @@ from copy import deepcopy
 from scripts.eval_catboost import train_catboost
 from scripts.eval_mlp import train_mlp
 from scripts.eval_simple import train_simple
+from scripts.eval_xgboost import train_xgboost
 
 pipeline = {
     'ddpm': 'scripts/pipeline.py',
@@ -70,6 +71,17 @@ def eval_seeds(
                     T_dict["normalization"] = "quantile"
                     T_dict["cat_encoding"] = "one-hot"
                     metric_report = train_mlp(
+                        parent_dir=temp_config['parent_dir'],
+                        real_data_path=temp_config['real_data_path'],
+                        eval_type=eval_type,
+                        T_dict=T_dict,
+                        seed=seed,
+                        change_val=change_val
+                    )
+                elif model_type == "xgboost":
+                    T_dict["normalization"] = None
+                    T_dict["cat_encoding"] = None
+                    metric_report = train_xgboost(
                         parent_dir=temp_config['parent_dir'],
                         real_data_path=temp_config['real_data_path'],
                         eval_type=eval_type,
