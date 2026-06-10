@@ -4,6 +4,7 @@ import tempfile
 import lib
 import os
 import shutil
+import matplotlib.pyplot as plt
 from pathlib import Path
 from copy import deepcopy
 from scripts.eval_catboost import train_catboost
@@ -32,6 +33,7 @@ def eval_seeds(
 
     metrics_seeds_report = lib.SeedsMetricsReport()
     parent_dir = Path(raw_config["parent_dir"])
+    print("Synthetic data in", parent_dir)
 
     if eval_type == 'real':
         n_datasets = 1
@@ -53,8 +55,10 @@ def eval_seeds(
             if eval_type != 'real' and n_datasets > 1:
                 subprocess.run(['python3.9', f'{pipeline[sampling_method]}', '--config', f'{str(dir_ / "config.toml")}', '--sample'], check=True)
 
-            T_dict = deepcopy(raw_config['eval']['T'])
+            model_curves = []
             for seed in range(n_seeds):
+                T_dict = deepcopy(raw_config['eval']['T'])
+                T_dict['seed'] = seed
                 print(f'**Eval Iter: {sample_seed*n_seeds + (seed + 1)}/{n_seeds * n_datasets}**')
                 if model_type == "catboost":
                     T_dict["normalization"] = None
@@ -81,16 +85,29 @@ def eval_seeds(
                 elif model_type == "xgboost":
                     T_dict["normalization"] = None
                     T_dict["cat_encoding"] = None
-                    metric_report = train_xgboost(
-                        parent_dir=temp_config['parent_dir'],
+                    metric_report, model_results, eval_metric = train_xgboost(
+                        # parent_dir=temp_config['parent_dir'],
+                        parent_dir=parent_dir,
                         real_data_path=temp_config['real_data_path'],
                         eval_type=eval_type,
                         T_dict=T_dict,
                         seed=seed,
                         change_val=change_val
                     )
+                    model_curves.append(model_results['validation_0'][eval_metric])
 
                 metrics_seeds_report.add_report(metric_report)
+            
+            if model_type == "xgboost":
+                plt.xlabel("Boosting Round")
+                plt.ylabel(eval_metric)
+                plt.title("XGBoost Classifier Training Curve")
+                for i, curve in enumerate(model_curves):
+                    plt.plot(range(1, len(curve)+1), curve, label=f'Validation {i+1}')
+                fig_path = f"{parent_dir}/training_plots/xgboost_curve_ds{sample_seed}.png"
+                plt.legend()
+                plt.savefig(fig_path)
+                print(f"Saved training plot to {fig_path}")
 
     metrics_seeds_report.get_mean_std()
     res = metrics_seeds_report.print_result()
@@ -116,6 +133,7 @@ def main():
     parser.add_argument('model_type',  type=str, default='catboost')
     parser.add_argument('n_datasets', type=int, default=1)
     parser.add_argument('--no_dump', action='store_false',  default=True)
+    parser.add_argument('--change_val', action='store_true', default=False)
 
     args = parser.parse_args()
     raw_config = lib.load_config(args.config)
@@ -126,7 +144,8 @@ def main():
         eval_type=args.eval_type,
         model_type=args.model_type,
         n_datasets=args.n_datasets,
-        dump=args.no_dump
+        dump=args.no_dump,
+        change_val=args.change_val
     )
 
 if __name__ == '__main__':

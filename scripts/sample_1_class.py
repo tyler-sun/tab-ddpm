@@ -185,19 +185,19 @@ def sample_1_class(
     #         callbacks=[es, EpochScoring(f1, lower_is_better=False)],
     #     )
 
-        # filter for samples close to the decision boundary
-        X = concat_features(D)
-        boundary_clf.fit(X['train'], D.y['train'])
+            # filter for samples close to the decision boundary
+            X = concat_features(D)
+            boundary_clf.fit(X['train'], D.y['train'])
 
-        X_gen_catboost = concat_to_df(D, X_gen)
-        probs = boundary_clf.predict_proba(X_gen_catboost)[:, 1]
+            X_gen_catboost = concat_to_df(D, X_gen)
+            probs = boundary_clf.predict_proba(X_gen_catboost)[:, 1]
 
-        threshold = 0.5
-        margin = np.abs(probs - threshold)
-        boundary_indices = margin < 0.3
-        X_gen = X_gen[boundary_indices]
-        y_gen = y_gen[boundary_indices]
-        print(f"Filtered to {X_gen.shape[0]} samples close to the decision boundary")
+            threshold = 0.5
+            margin = np.abs(probs - threshold)
+            boundary_indices = margin < 0.25
+            X_gen = X_gen[boundary_indices]
+            y_gen = y_gen[boundary_indices]
+            print(f"Filtered to {X_gen.shape[0]} samples close to the decision boundary")
 
     num_numerical_features = num_numerical_features + int(D.is_regression and not model_params["is_y_cond"])
 

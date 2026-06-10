@@ -30,7 +30,7 @@ def train_mlp(
     T = lib.Transformations(**T_dict)
     
     if change_val:
-        X_num_real, X_cat_real, y_real, X_num_val, X_cat_val, y_val = lib.read_changed_val(real_data_path, val_size=0.2)
+        X_num_real, X_cat_real, y_real, X_num_val, X_cat_val, y_val = lib.read_changed_val(real_data_path, val_size=0.2, random_state=seed)
 
     X = None
     print('-'*100)
@@ -57,6 +57,8 @@ def train_mlp(
         print('loading real data...')
         if not change_val:
             X_num, X_cat, y = lib.read_pure_data(real_data_path)
+        else:
+            X_num, X_cat, y = X_num_real, X_cat_real, y_real
     else:
         raise "Choose eval method"
 

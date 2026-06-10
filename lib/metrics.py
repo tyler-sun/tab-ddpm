@@ -22,9 +22,14 @@ class MetricsReport:
             for k in report.keys():
                 self._res[k]["acc"] = report[k]["accuracy"]
                 self._res[k]["f1"] = report[k]["macro avg"]["f1-score"]
+                self._res[k]["precision"] = report[k]["macro avg"]["precision"]
+                self._res[k]["recall"] = report[k]["macro avg"]["recall"]
                 if task_type == TaskType.BINCLASS:
                     self._res[k]["roc_auc"] = report[k]["roc_auc"]
                     self._metrics_names.append("roc_auc")
+
+                    self._res[k]["peak-f1"] = max(report[k][f"{i}"]["f1-score"] for i in range(2))
+                    self._metrics_names.append("peak-f1")
 
         elif task_type == TaskType.REGRESSION:
             self._metrics_names = ["r2", "rmse"]

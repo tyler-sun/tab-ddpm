@@ -33,7 +33,8 @@ def sample(
     disbalance = None,
     device = torch.device('cuda:1'),
     seed = 0,
-    change_val = False
+    change_val = False,
+    append = False
 ):
     zero.improve_reproducibility(seed)
 
@@ -151,9 +152,23 @@ def sample(
         if len(disc_cols):
             X_num = round_columns(X_num_real, X_num, disc_cols)
 
+    data_new = []
     if num_numerical_features != 0:
         print("Num shape: ", X_num.shape)
         np.save(os.path.join(parent_dir, 'X_num_train'), X_num)
+        data_new.append(X_num)
     if num_numerical_features < X_gen.shape[1]:
         np.save(os.path.join(parent_dir, 'X_cat_train'), X_cat)
+        data_new.append(X_cat)
     np.save(os.path.join(parent_dir, 'y_train'), y_gen)
+    data_new.append(y_gen)
+
+    if append:
+        files = ['X_num_train.npy', 'X_cat_train.npy', 'y_train.npy'] 
+        for file, data in zip(files, data_new):
+            data_path = os.path.join(parent_dir, file)
+            if os.path.exists(data_path):
+                data_old = np.load(data_path, allow_pickle=True)
+                data_combined = np.vstack([data_old, data])
+                np.save(data_path, data_combined)
+                print(f"Appended {X_num.shape[0]} samples to {data_path} for {data_combined.shape[0]} total samples.")

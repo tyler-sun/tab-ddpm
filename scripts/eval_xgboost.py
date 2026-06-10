@@ -1,15 +1,17 @@
-from catboost import CatBoostClassifier, CatBoostRegressor
+from xgboost import XGBClassifier, XGBRegressor
 from sklearn.metrics import classification_report, r2_score
+from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import os
 from sklearn.utils import shuffle
 import zero
+import matplotlib.pyplot as plt
 from pathlib import Path
 import lib
 from pprint import pprint
-from lib import concat_features, read_pure_data, get_catboost_config, read_changed_val
+from lib import concat_features, read_pure_data, get_xgboost_config, read_changed_val
 
-def train_catboost(
+def train_xgboost(
     parent_dir,
     real_data_path,
     eval_type,
@@ -29,20 +31,13 @@ def train_catboost(
         X_num_real, X_cat_real, y_real, X_num_val, X_cat_val, y_val = read_changed_val(real_data_path, val_size=0.2, random_state=seed)
 
     X = None
+    print("running training of xgboost classifier...")
     print('-'*100)
     if eval_type == 'merged':
         print('loading merged data...')
         if not change_val:
             X_num_real, X_cat_real, y_real = read_pure_data(real_data_path)
         X_num_fake, X_cat_fake, y_fake = read_pure_data(synthetic_data_path)
-
-        ###
-        # dists = privacy_metrics(real_data_path, synthetic_data_path)
-        # bad_fakes = dists.argsort()[:int(0.25 * len(y_fake))]
-        # X_num_fake = np.delete(X_num_fake, bad_fakes, axis=0)
-        # X_cat_fake = np.delete(X_cat_fake, bad_fakes, axis=0) if X_cat_fake is not None else None
-        # y_fake = np.delete(y_fake, bad_fakes, axis=0)
-        ###
 
         y = np.concatenate([y_real, y_fake], axis=0)
 
@@ -86,38 +81,52 @@ def train_catboost(
     X = concat_features(D)
     print(f'Train size: {X["train"].shape}, Val size {X["val"].shape}')
 
+    # set is_cv to False for fraudDiffuse replication and True for tuned parameters from Optuna
     if params is None:
-        catboost_config = get_catboost_config(real_data_path, is_cv=True)
+        xgboost_config = get_xgboost_config(real_data_path, is_cv=False)
     else:
-        catboost_config = params
+        xgboost_config = params
 
-    if 'cat_features' not in catboost_config:
-        catboost_config['cat_features'] = list(range(D.n_num_features, D.n_features))
+    # if 'cat_features' not in xgboost_config:
+    #     xgboost_config['cat_features'] = list(range(D.n_num_features, D.n_features))
 
-    for col in range(D.n_features):
-        for split in X.keys():
-            if col in catboost_config['cat_features']:
-                X[split][col] = X[split][col].astype(str)
-            else:
-                X[split][col] = X[split][col].astype(float)
+    # for col in range(D.n_features):
+    #     for split in X.keys():
+    #         if col in xgboost_config['cat_features']:
+    #             X[split][col] = X[split][col].astype(str)
+    #         else:
+    #             X[split][col] = X[split][col].astype(float)
+    if 'cat_features' in xgboost_config:
+        for col in xgboost_config['cat_features']:
+            encoder = LabelEncoder()
+            X['train'].iloc[:, col] = encoder.fit_transform(X['train'].iloc[:, col].astype(str))
+            X['val'].iloc[:, col] = encoder.transform(X['val'].iloc[:, col].astype(str))
+            X['test'].iloc[:, col] = encoder.transform(X['test'].iloc[:, col].astype(str))
+
+    for col in range(D.n_num_features):
+        for split in X:
+            X[split].iloc[:, col] = X[split].iloc[:, col].astype(float)
+
     print(T_dict)
-    pprint(catboost_config, width=100)
+    pprint(xgboost_config, width=100)
     print('-'*100)
     
     if D.is_regression:
-        model = CatBoostRegressor(
-            **catboost_config,
-            eval_metric='RMSE',
-            random_seed=seed
+        model = XGBRegressor(
+            **xgboost_config,
+            eval_metric='rmse',
+            random_state=seed
         )
         predict = model.predict
     else:
-        model = CatBoostClassifier(
-            loss_function="MultiClass" if D.is_multiclass else "Logloss",
-            **catboost_config,
-            eval_metric='TotalF1',
-            random_seed=seed,
-            class_names=[str(i) for i in range(D.n_classes)] if D.is_multiclass else ["0", "1"]
+        objective = "multi:softprob" if D.is_multiclass else "binary:logistic"
+        # for binary classification, can set as error, logloss (probabilistic measure) or auc (for ranking performance)
+        eval_metric = "mlogloss" if D.is_multiclass else "aucpr"
+        model = XGBClassifier(
+            objective=objective,
+            **xgboost_config,
+            eval_metric=eval_metric,
+            random_state=seed
         )
         predict = (
             model.predict_proba
@@ -127,7 +136,7 @@ def train_catboost(
 
     model.fit(
         X['train'], D.y['train'],
-        eval_set=(X['val'], D.y['val']),
+        eval_set=[(X['train'], D.y['train']), (X['val'], D.y['val'])],
         verbose=100
     )
     predictions = {k: predict(v) for k, v in X.items()}
@@ -142,8 +151,19 @@ def train_catboost(
     metrics_report.print_metrics()
 
     if parent_dir is not None:
-        lib.dump_json(report, os.path.join(parent_dir, "results_catboost.json"))
+        lib.dump_json(report, os.path.join(parent_dir, "results_xgboost.json"))
 
-    return metrics_report
+        # add plot for training progression
+        # epochs = len(model.evals_result()['validation_0'][eval_metric])
+        # iterations = range(1, epochs+1)
+        # plt.plot(iterations, model.evals_result()['validation_0'][eval_metric], label='Validation')
+        # plt.xlabel("Boosting Round")
+        # plt.ylabel(eval_metric)
+        # plt.title("XGBoost Classifier Training Curve")
+        # fig_path = os.path.join(parent_dir, "xgboost_training.png")
+        # plt.savefig(fig_path)
+        # print(f"Saved training plot to {fig_path}")
+
+    return metrics_report, model.evals_result(), eval_metric
 
     

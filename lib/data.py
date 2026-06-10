@@ -679,7 +679,7 @@ def read_pure_data(path, split='train'):
 
     return X_num, X_cat, y
 
-def read_changed_val(path, val_size=0.2):
+def read_changed_val(path, val_size=0.2, random_state=777):
     path = Path(path)
     X_num_train, X_cat_train, y_train = read_pure_data(path, 'train')
     X_num_val, X_cat_val, y_val = read_pure_data(path, 'val')
@@ -689,9 +689,9 @@ def read_changed_val(path, val_size=0.2):
 
     ixs = np.arange(y.shape[0])
     if is_regression:
-        train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=777)
+        train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=random_state)
     else:
-        train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=777, stratify=y)
+        train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=random_state, stratify=y)
     y_train = y[train_ixs]
     y_val = y[val_ixs]
 

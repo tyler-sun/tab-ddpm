@@ -130,7 +130,6 @@ def train(
     train_loader = lib.prepare_fast_dataloader(dataset, split='train', batch_size=batch_size)
 
 
-
     diffusion = GaussianMultinomialDiffusion(
         num_classes=K,
         num_numerical_features=num_numerical_features,
@@ -143,6 +142,9 @@ def train(
     diffusion.to(device)
     diffusion.train()
 
+    epochs = steps * batch_size // len(dataset.X_num['train']) + 1
+    print(f"Training for {epochs} epochs ({steps} steps, {batch_size} batch size)")
+    
     trainer = Trainer(
         diffusion,
         train_loader,

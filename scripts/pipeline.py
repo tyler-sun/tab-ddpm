@@ -5,6 +5,7 @@ import argparse
 from train import train
 from sample import sample
 from sample_1_class import sample_1_class
+from filter_1_class import filter_1_class
 from eval_catboost import train_catboost
 from eval_xgboost import train_xgboost
 from eval_mlp import train_mlp
@@ -33,6 +34,7 @@ def main():
     parser.add_argument('--train', action='store_true', default=False)
     parser.add_argument('--sample', action='store_true',  default=False)
     parser.add_argument('--sample_1', type=int)
+    parser.add_argument('--filter', type=int)
     parser.add_argument('--eval', action='store_true',  default=False)
     parser.add_argument('--change_val', action='store_true',  default=False)
 
@@ -75,7 +77,8 @@ def main():
             num_numerical_features=raw_config['num_numerical_features'],
             device=device,
             seed=raw_config['sample'].get('seed', 0),
-            change_val=args.change_val
+            change_val=args.change_val,
+            append=raw_config['sample'].get('append', False)
         )
     elif args.sample_1:
         sample_1_class(
@@ -95,7 +98,13 @@ def main():
             change_val=args.change_val,
             fixed_class=args.sample_1,
             boundary_filter=raw_config['sample'].get('boundary_filter', False),
-            classifier=raw_config['eval']['type']['eval_model']
+            classifier=raw_config['sample'].get('classifier', 'catboost')
+        )
+    if args.filter:
+        filter_1_class(
+            parent_dir=raw_config['parent_dir'],
+            class_filter = args.filter,
+            limit_samples=raw_config['sample'].get('limit_filter', None)
         )
 
     save_file(os.path.join(raw_config['parent_dir'], 'info.json'), os.path.join(raw_config['real_data_path'], 'info.json'))

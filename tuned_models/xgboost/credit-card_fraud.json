@@ -1,0 +1,6 @@
+{
+    "learning_rate": 0.05,
+    "max_depth": 4,
+    "n_estimators": 1200,
+    "early_stopping_rounds": 10
+}
