@@ -37,6 +37,7 @@ def sample(
     append = False
 ):
     zero.improve_reproducibility(seed)
+    print("Sampling with seed", seed)
 
     T = lib.Transformations(**T_dict)
     D = make_dataset(
@@ -75,7 +76,7 @@ def sample(
     diffusion.to(device)
     diffusion.eval()
     
-    _, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
+    labels, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
     # empirical_class_dist = empirical_class_dist.float() + torch.tensor([-5000., 10000.]).float()
     if disbalance == 'fix':
         empirical_class_dist[0], empirical_class_dist[1] = empirical_class_dist[1], empirical_class_dist[0]
@@ -114,6 +115,14 @@ def sample(
     #     )
     X_gen, y_gen = x_gen.numpy(), y_gen.numpy()
 
+    # Map sampled class indices back to original label values (handles datasets
+    # where labels aren't 0..K-1 or when only a subset of classes is present).
+    try:
+        labels_np = labels.numpy()
+        y_gen = labels_np[y_gen]
+    except Exception:
+        pass
+
     ###
     # X_num_unnorm = X_gen[:, :num_numerical_features]
     # lo = np.percentile(X_num_unnorm, 2.5, axis=0)
@@ -125,6 +134,7 @@ def sample(
 
     num_numerical_features = num_numerical_features + int(D.is_regression and not model_params["is_y_cond"])
 
+    data_new = []
     X_num_ = X_gen
     if num_numerical_features < X_gen.shape[1]:
         np.save(os.path.join(parent_dir, 'X_cat_unnorm'), X_gen[:, num_numerical_features:])
@@ -132,6 +142,7 @@ def sample(
         if T_dict['cat_encoding'] == 'one-hot':
             X_gen[:, num_numerical_features:] = to_good_ohe(D.cat_transform.steps[0][1], X_num_[:, num_numerical_features:])
         X_cat = D.cat_transform.inverse_transform(X_gen[:, num_numerical_features:])
+        data_new.append(X_cat)
 
     if num_numerical_features_ != 0:
         # _, normalize = lib.normalize({'train' : X_num_real}, T_dict['normalization'], T_dict['seed'], True)
@@ -151,24 +162,33 @@ def sample(
             X_num = X_num[:, 1:]
         if len(disc_cols):
             X_num = round_columns(X_num_real, X_num, disc_cols)
-
-    data_new = []
-    if num_numerical_features != 0:
-        print("Num shape: ", X_num.shape)
-        np.save(os.path.join(parent_dir, 'X_num_train'), X_num)
         data_new.append(X_num)
-    if num_numerical_features < X_gen.shape[1]:
-        np.save(os.path.join(parent_dir, 'X_cat_train'), X_cat)
-        data_new.append(X_cat)
-    np.save(os.path.join(parent_dir, 'y_train'), y_gen)
-    data_new.append(y_gen)
+
 
     if append:
-        files = ['X_num_train.npy', 'X_cat_train.npy', 'y_train.npy'] 
+        # data_new is built as [X_cat (if any), X_num (if any), y_gen]
+        # ensure files align with data_new ordering to avoid mismatches
+        files = []
+        if num_numerical_features < X_gen.shape[1]:
+            files.append('X_cat_train.npy')
+        if num_numerical_features != 0:
+            files.append('X_num_train.npy')
+        files.append('y_train.npy')
         for file, data in zip(files, data_new):
             data_path = os.path.join(parent_dir, file)
             if os.path.exists(data_path):
                 data_old = np.load(data_path, allow_pickle=True)
                 data_combined = np.vstack([data_old, data])
                 np.save(data_path, data_combined)
-                print(f"Appended {X_num.shape[0]} samples to {data_path} for {data_combined.shape[0]} total samples.")
+                print(f"Appended {data.shape[0]} samples to {data_path} for {data_combined.shape[0]} total samples.")
+    else:
+        print("Saving synthetic data to", parent_dir)
+        if num_numerical_features != 0:
+            print("Num shape: ", X_num.shape)
+            np.save(os.path.join(parent_dir, 'X_num_train'), X_num)
+
+        if num_numerical_features < X_gen.shape[1]:
+            np.save(os.path.join(parent_dir, 'X_cat_train'), X_cat)
+
+        np.save(os.path.join(parent_dir, 'y_train'), y_gen)
+        data_new.append(y_gen)

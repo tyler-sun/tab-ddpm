@@ -27,9 +27,10 @@ class MetricsReport:
                 if task_type == TaskType.BINCLASS:
                     self._res[k]["roc_auc"] = report[k]["roc_auc"]
                     self._metrics_names.append("roc_auc")
-
-                    self._res[k]["peak-f1"] = max(report[k][f"{i}"]["f1-score"] for i in range(2))
-                    self._metrics_names.append("peak-f1")
+                    self._res[k]["pr_auc"] = report[k]["pr_auc"]
+                    self._metrics_names.append("pr_auc")
+                    # self._res[k]["peak-f1"] = max(report[k][f"{i}"]["f1-score"] for i in range(2))
+                    # self._metrics_names.append("peak-f1")
 
         elif task_type == TaskType.REGRESSION:
             self._metrics_names = ["r2", "rmse"]
@@ -160,4 +161,6 @@ def calculate_metrics(
         )
         if task_type == TaskType.BINCLASS:
             result['roc_auc'] = skm.roc_auc_score(y_true, probs)
+            # PR-AUC (average precision) for binary classification
+            result['pr_auc'] = skm.average_precision_score(y_true, probs)
     return result

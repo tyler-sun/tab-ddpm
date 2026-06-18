@@ -82,7 +82,7 @@ def sample_1_class(
 
     print("Generating samples of class", fixed_class)
     
-    _, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
+    labels, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
     # empirical_class_dist = empirical_class_dist.float() + torch.tensor([-5000., 10000.]).float()
     if disbalance == 'fix':
         empirical_class_dist[0], empirical_class_dist[1] = empirical_class_dist[1], empirical_class_dist[0]
@@ -141,6 +141,14 @@ def sample_1_class(
     #         replacement=True
     #     )
     X_gen, y_gen = x_gen.numpy(), y_gen.numpy()
+
+    # Map sampled class indices back to original label values (handles datasets
+    # where labels aren't 0..K-1 or when only a subset of classes is present).
+    try:
+        labels_np = labels.numpy()
+        y_gen = labels_np[y_gen]
+    except Exception:
+        pass
 
     # use xgboost classifier as catboost and mlp are already used for the final evaluation?
     # config_path = lib.load_config(parent_dir / "config.toml")

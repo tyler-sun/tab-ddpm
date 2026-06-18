@@ -28,7 +28,8 @@ def eval_seeds(
     model_type="catboost",
     n_datasets=1,
     dump=True,
-    change_val=False
+    change_val=False,
+    log_results=False
 ):
 
     metrics_seeds_report = lib.SeedsMetricsReport()
@@ -99,6 +100,7 @@ def eval_seeds(
                 metrics_seeds_report.add_report(metric_report)
             
             if model_type == "xgboost":
+                plt.figure(figsize=(8,6))
                 plt.xlabel("Boosting Round")
                 plt.ylabel(eval_metric)
                 plt.title("XGBoost Classifier Training Curve")
@@ -111,6 +113,13 @@ def eval_seeds(
 
     metrics_seeds_report.get_mean_std()
     res = metrics_seeds_report.print_result()
+    if log_results:
+        with open(f"eval_results.txt", "a") as file:
+            file.write(str(res['val']))
+            file.write("\n")
+            file.write(str(res['test']))
+            file.write("\n"*2)
+
     if os.path.exists(parent_dir/ f"eval_{model_type}.json"):
         eval_dict = lib.load_json(parent_dir / f"eval_{model_type}.json")
         eval_dict = eval_dict | {eval_type: res}
@@ -134,6 +143,7 @@ def main():
     parser.add_argument('n_datasets', type=int, default=1)
     parser.add_argument('--no_dump', action='store_false',  default=True)
     parser.add_argument('--change_val', action='store_true', default=False)
+    parser.add_argument('--log_results', action='store_true', default=False)
 
     args = parser.parse_args()
     raw_config = lib.load_config(args.config)
@@ -145,7 +155,8 @@ def main():
         model_type=args.model_type,
         n_datasets=args.n_datasets,
         dump=args.no_dump,
-        change_val=args.change_val
+        change_val=args.change_val,
+        log_results=args.log_results
     )
 
 if __name__ == '__main__':

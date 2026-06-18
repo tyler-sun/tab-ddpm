@@ -2,10 +2,12 @@ import tomli
 import shutil
 import os
 import argparse
+import random
 from train import train
 from sample import sample
 from sample_1_class import sample_1_class
 from filter_1_class import filter_1_class
+from limit import limit
 from eval_catboost import train_catboost
 from eval_xgboost import train_xgboost
 from eval_mlp import train_mlp
@@ -35,6 +37,7 @@ def main():
     parser.add_argument('--sample', action='store_true',  default=False)
     parser.add_argument('--sample_1', type=int)
     parser.add_argument('--filter', type=int)
+    parser.add_argument('--limit', type=int)
     parser.add_argument('--eval', action='store_true',  default=False)
     parser.add_argument('--change_val', action='store_true',  default=False)
 
@@ -76,7 +79,8 @@ def main():
             T_dict=raw_config['train']['T'],
             num_numerical_features=raw_config['num_numerical_features'],
             device=device,
-            seed=raw_config['sample'].get('seed', 0),
+            # seed=raw_config['sample'].get('seed', random.randint(0, 10**6)),
+            seed=random.randint(0, 10**6),
             change_val=args.change_val,
             append=raw_config['sample'].get('append', False)
         )
@@ -94,7 +98,7 @@ def main():
             T_dict=raw_config['train']['T'],
             num_numerical_features=raw_config['num_numerical_features'],
             device=device,
-            seed=raw_config['sample'].get('seed', 0),
+            seed=raw_config['sample'].get('seed', random.randint(0, 10**6)),
             change_val=args.change_val,
             fixed_class=args.sample_1,
             boundary_filter=raw_config['sample'].get('boundary_filter', False),
@@ -104,8 +108,14 @@ def main():
         filter_1_class(
             parent_dir=raw_config['parent_dir'],
             class_filter = args.filter,
-            limit_samples=raw_config['sample'].get('limit_filter', None)
+            limit_samples=None
         )
+    if args.limit:
+        limit(
+            parent_dir=raw_config['parent_dir'],
+            limit_samples=args.limit
+        )
+
 
     save_file(os.path.join(raw_config['parent_dir'], 'info.json'), os.path.join(raw_config['real_data_path'], 'info.json'))
     if args.eval:
