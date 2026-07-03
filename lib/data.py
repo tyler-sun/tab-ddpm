@@ -668,8 +668,9 @@ def concat_to_pd(X_num, X_cat, y):
             pd.DataFrame(y, columns=['y'])
         ], axis=1)
 
-def read_pure_data(path, split='train'):
-    y = np.load(os.path.join(path, f'y_{split}.npy'), allow_pickle=True)
+def read_pure_data(path, split='train', target_prefix='y'):
+    print("Training on", os.path.join(path, f'{target_prefix}_{split}.npy'))
+    y = np.load(os.path.join(path, f'{target_prefix}_{split}.npy'), allow_pickle=True)
     X_num = None
     X_cat = None
     if os.path.exists(os.path.join(path, f'X_num_{split}.npy')):
@@ -679,10 +680,10 @@ def read_pure_data(path, split='train'):
 
     return X_num, X_cat, y
 
-def read_changed_val(path, val_size=0.2, random_state=777):
+def read_changed_val(path, val_size=0.2, random_state=777, target_prefix='y'):
     path = Path(path)
-    X_num_train, X_cat_train, y_train = read_pure_data(path, 'train')
-    X_num_val, X_cat_val, y_val = read_pure_data(path, 'val')
+    X_num_train, X_cat_train, y_train = read_pure_data(path, 'train', target_prefix)
+    X_num_val, X_cat_val, y_val = read_pure_data(path, 'val', target_prefix)
     is_regression = load_json(path / 'info.json')['task_type'] == 'regression'
 
     y = np.concatenate([y_train, y_val], axis=0)

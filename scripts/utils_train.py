@@ -39,8 +39,11 @@ def make_dataset(
     T: lib.Transformations,
     num_classes: int,
     is_y_cond: bool,
-    change_val: bool
+    change_val: bool,
+    use_risk_variable: bool
 ):
+    target_prefix = 'r' if use_risk_variable else 'y'
+
     # classification
     if num_classes > 0:
         X_cat = {} if os.path.exists(os.path.join(data_path, 'X_cat_train.npy')) or not is_y_cond else None
@@ -48,7 +51,7 @@ def make_dataset(
         y = {} 
 
         for split in ['train', 'val', 'test']:
-            X_num_t, X_cat_t, y_t = lib.read_pure_data(data_path, split)
+            X_num_t, X_cat_t, y_t = lib.read_pure_data(data_path, split, target_prefix=target_prefix)
             if X_num is not None:
                 X_num[split] = X_num_t
             if not is_y_cond:
@@ -63,7 +66,7 @@ def make_dataset(
         y = {}
 
         for split in ['train', 'val', 'test']:
-            X_num_t, X_cat_t, y_t = lib.read_pure_data(data_path, split)
+            X_num_t, X_cat_t, y_t = lib.read_pure_data(data_path, split, target_prefix=target_prefix)
             if not is_y_cond:
                 X_num_t = concat_y_to_X(X_num_t, y_t)
             if X_num is not None:

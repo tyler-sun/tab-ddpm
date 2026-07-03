@@ -4,30 +4,33 @@ real_data_path = "data/credit-card/"
 model_type = "mlp"
 num_numerical_features = 30
 device = "cuda:0"
+risk_conditioning = true
 
 [model_params]
 is_y_cond = true
-num_classes = 2
+num_classes = 0
 
 [model_params.rtdl_params]
 d_layers = [
     512,
-    256,
-    256,
-    256,
-    256,
+    1024,
+    1024,
+    1024,
+    1024,
+    1024,
+    1024,
     256,
 ]
 dropout = 0.0
 
 [diffusion_params]
-num_timesteps = 1000
+num_timesteps = 100
 gaussian_loss_type = "mse"
 scheduler = "cosine"
 
 [train.main]
-steps = 5000
-lr = 0.0006902619882766859
+steps = 20000
+lr = 0.0005306160757129948
 weight_decay = 0.0
 batch_size = 4096
 
@@ -41,12 +44,16 @@ cat_encoding = "__none__"
 y_policy = "default"
 
 [sample]
-num_samples = 92562
+num_samples = 10000
 batch_size = 10000
+append = false
+limit_filter = 492
+boundary_filter = false
+classifier = "catboost"
 seed = 0
 
 [eval.type]
-eval_model = "catboost"
+eval_model = "xgboost"
 eval_type = "merged"
 
 [eval.T]

@@ -19,7 +19,8 @@ def train_xgboost(
     seed = 0,
     params = None,
     change_val = True,
-    device = None # dummy
+    device = None, # dummy
+    risk = False
 ):
     zero.improve_reproducibility(seed)
     if eval_type != "real":
@@ -27,8 +28,14 @@ def train_xgboost(
     info = lib.load_json(os.path.join(real_data_path, 'info.json'))
     T = lib.Transformations(**T_dict)
     
+    if risk:
+        target = 'r'
+    else:
+        target = 'y'
+    print(risk, target)
+    
     if change_val:
-        X_num_real, X_cat_real, y_real, X_num_val, X_cat_val, y_val = read_changed_val(real_data_path, val_size=0.2, random_state=seed)
+        X_num_real, X_cat_real, y_real, X_num_val, X_cat_val, y_val = read_changed_val(real_data_path, val_size=0.2, random_state=seed, target_prefix=target)
 
     X = None
     print("running training of xgboost classifier...")
@@ -36,7 +43,7 @@ def train_xgboost(
     if eval_type == 'merged':
         print('loading merged data...')
         if not change_val:
-            X_num_real, X_cat_real, y_real = read_pure_data(real_data_path)
+             X_num_real, X_cat_real, y_real = read_pure_data(real_data_path, target_prefix=target)
         X_num_fake, X_cat_fake, y_fake = read_pure_data(synthetic_data_path)
 
         y = np.concatenate([y_real, y_fake], axis=0)
@@ -58,15 +65,15 @@ def train_xgboost(
     elif eval_type == 'real':
         print('loading real data...')
         if not change_val:
-            X_num, X_cat, y = read_pure_data(real_data_path)
+            X_num, X_cat, y = read_pure_data(real_data_path, target_prefix=target)
         else:
             X_num, X_cat, y = X_num_real, X_cat_real, y_real
     else:
         raise "Choose eval method"
 
     if not change_val:
-        X_num_val, X_cat_val, y_val = read_pure_data(real_data_path, 'val')
-    X_num_test, X_cat_test, y_test = read_pure_data(real_data_path, 'test')
+        X_num_val, X_cat_val, y_val = read_pure_data(real_data_path, 'val', target_prefix=target)
+    X_num_test, X_cat_test, y_test = read_pure_data(real_data_path, 'test', target_prefix=target)
 
     D = lib.Dataset(
         {'train': X_num, 'val': X_num_val, 'test': X_num_test} if X_num is not None else None,
@@ -111,10 +118,12 @@ def train_xgboost(
     pprint(xgboost_config, width=100)
     print('-'*100)
     
+    print("Regression dataset:", D.is_regression)
     if D.is_regression:
+        eval_metric = 'rmse'
         model = XGBRegressor(
             **xgboost_config,
-            eval_metric='rmse',
+            eval_metric=eval_metric,
             random_state=seed
         )
         predict = model.predict

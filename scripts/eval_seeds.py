@@ -93,7 +93,8 @@ def eval_seeds(
                         eval_type=eval_type,
                         T_dict=T_dict,
                         seed=seed,
-                        change_val=change_val
+                        change_val=change_val,
+                        risk=temp_config.get('risk_conditioning', False)
                     )
                     model_curves.append(model_results['validation_0'][eval_metric])
 

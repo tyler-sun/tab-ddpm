@@ -90,7 +90,8 @@ def train(
     num_numerical_features = 0,
     device = torch.device('cuda:1'),
     seed = 0,
-    change_val = False
+    change_val = False,
+    use_risk_variable = False
 ):
     real_data_path = os.path.normpath(real_data_path)
     parent_dir = os.path.normpath(parent_dir)
@@ -104,7 +105,8 @@ def train(
         T,
         num_classes=model_params['num_classes'],
         is_y_cond=model_params['is_y_cond'],
-        change_val=change_val
+        change_val=change_val,
+        use_risk_variable=use_risk_variable
     )
 
     K = np.array(dataset.get_category_sizes('train'))

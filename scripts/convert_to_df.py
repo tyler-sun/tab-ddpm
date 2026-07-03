@@ -8,7 +8,8 @@ def convert_to_df(ds_name="adult", sampling_method="ddpm", eval_type="synthetic"
     
     if file_path is not None:
         try:
-            df = pd.read_csv(file_path)
+            data = np.load(file_path, allow_pickle=True)
+            df = pd.DataFrame(data)
             print(f"Loaded CSV from {file_path}")
         except Exception as e:
             print(f"Failed to load CSV from {file_path}: {e}")
@@ -32,6 +33,8 @@ def convert_to_df(ds_name="adult", sampling_method="ddpm", eval_type="synthetic"
                     model_folder = "ddpm_cb_best"
                 elif model_type == "xgboost":
                     model_folder = "ddpm_xg_best"
+                elif model_type == "tuned" or model_type == "tune":
+                    model_folder = "ddpm_tune_best"
                 else:
                     model_folder = "ddpm_mlp_best"
             elif sampling_method in ["ctabgan", "ctabgan-plus", "tvae", "smote"]:
@@ -92,7 +95,8 @@ def main():
         sampling_method=args.sampling_method,
         eval_type=args.eval_type,
         model_type=args.model_type,
-        normalized=args.normalized
+        normalized=args.normalized,
+        file_path=args.file_path
     )
     if df is not None:
         df.to_csv(f'{args.ds_name}_{args.sampling_method}_{args.eval_type}_{args.model_type}_{"normalized" if args.normalized else "unnormalized"}.csv', index=False)

@@ -34,7 +34,8 @@ def sample(
     device = torch.device('cuda:1'),
     seed = 0,
     change_val = False,
-    append = False
+    append = False,
+    use_risk_variable = False
 ):
     zero.improve_reproducibility(seed)
     print("Sampling with seed", seed)
@@ -45,7 +46,8 @@ def sample(
         T,
         num_classes=model_params['num_classes'],
         is_y_cond=model_params['is_y_cond'],
-        change_val=change_val
+        change_val=change_val,
+        use_risk_variable=use_risk_variable
     )
 
     K = np.array(D.get_category_sizes('train'))
@@ -76,31 +78,39 @@ def sample(
     diffusion.to(device)
     diffusion.eval()
     
-    labels, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
-    # empirical_class_dist = empirical_class_dist.float() + torch.tensor([-5000., 10000.]).float()
-    if disbalance == 'fix':
-        empirical_class_dist[0], empirical_class_dist[1] = empirical_class_dist[1], empirical_class_dist[0]
-        x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, empirical_class_dist.float(), ddim=False)
-
-    elif disbalance == 'fill':
-        ix_major = empirical_class_dist.argmax().item()
-        val_major = empirical_class_dist[ix_major].item()
-        x_gen, y_gen = [], []
-        for i in range(empirical_class_dist.shape[0]):
-            if i == ix_major:
-                continue
-            distrib = torch.zeros_like(empirical_class_dist)
-            distrib[i] = 1
-            num_samples = val_major - empirical_class_dist[i].item()
-            x_temp, y_temp = diffusion.sample_all(num_samples, batch_size, distrib.float(), ddim=False)
-            x_gen.append(x_temp)
-            y_gen.append(y_temp)
-        
-        x_gen = torch.cat(x_gen, dim=0)
-        y_gen = torch.cat(y_gen, dim=0)
-
+    # sampling with continuous risk conditioning
+    if model_params['num_classes'] == 0 and model_params['is_y_cond']:
+        print("Sampling on continuous variable.")
+        y_values = torch.from_numpy(D.y['train']).float()
+        if y_values.dim() == 1:
+            y_values = y_values.unsqueeze(-1)
+        x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, y_values=y_values, ddim=False)
     else:
-        x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, empirical_class_dist.float(), ddim=False)
+        # discrete class sampling
+        labels, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
+        if disbalance == 'fix':
+            empirical_class_dist[0], empirical_class_dist[1] = empirical_class_dist[1], empirical_class_dist[0]
+            x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, y_dist=empirical_class_dist.float(), ddim=False)
+
+        elif disbalance == 'fill':
+            ix_major = empirical_class_dist.argmax().item()
+            val_major = empirical_class_dist[ix_major].item()
+            x_gen, y_gen = [], []
+            for i in range(empirical_class_dist.shape[0]):
+                if i == ix_major:
+                    continue
+                distrib = torch.zeros_like(empirical_class_dist)
+                distrib[i] = 1
+                num_samples = val_major - empirical_class_dist[i].item()
+                x_temp, y_temp = diffusion.sample_all(num_samples, batch_size, y_dist=distrib.float(), ddim=False)
+                x_gen.append(x_temp)
+                y_gen.append(y_temp)
+            
+            x_gen = torch.cat(x_gen, dim=0)
+            y_gen = torch.cat(y_gen, dim=0)
+
+        else:
+            x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, y_dist=empirical_class_dist.float(), ddim=False)
 
 
     # try:
@@ -158,16 +168,17 @@ def sample(
                 disc_cols.append(col)
         print("Discrete cols:", disc_cols)
         if model_params['num_classes'] == 0:
-            y_gen = X_num[:, 0]
-            X_num = X_num[:, 1:]
+            if not use_risk_variable:
+                y_gen = X_num[:, 0]
+                X_num = X_num[:, 1:]
         if len(disc_cols):
             X_num = round_columns(X_num_real, X_num, disc_cols)
         data_new.append(X_num)
 
 
     if append:
-        # data_new is built as [X_cat (if any), X_num (if any), y_gen]
-        # ensure files align with data_new ordering to avoid mismatches
+        # data_new = [X_cat (if any), X_num (if any), y_gen]
+        # iterate through and append to corresponding files in parent_dir
         files = []
         if num_numerical_features < X_gen.shape[1]:
             files.append('X_cat_train.npy')
@@ -184,11 +195,13 @@ def sample(
     else:
         print("Saving synthetic data to", parent_dir)
         if num_numerical_features != 0:
-            print("Num shape: ", X_num.shape)
+            print("Numerical features shape: ", X_num.shape)
             np.save(os.path.join(parent_dir, 'X_num_train'), X_num)
 
         if num_numerical_features < X_gen.shape[1]:
+            print("Categorical features shape: ", X_cat.shape)
             np.save(os.path.join(parent_dir, 'X_cat_train'), X_cat)
 
-        np.save(os.path.join(parent_dir, 'y_train'), y_gen)
+        variable = 'y' if use_risk_variable else 'y'
+        np.save(os.path.join(parent_dir, f'{variable}_train'), y_gen)
         data_new.append(y_gen)
