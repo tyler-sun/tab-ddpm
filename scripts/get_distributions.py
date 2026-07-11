@@ -60,14 +60,48 @@ def get_class_distribution(file_path):
     return distribution, percents, data.shape
 
 
+def get_stats(file_path):
+    try:
+        if file_path.endswith('.npy'):
+            data = np.load(file_path, allow_pickle=True)
+        elif file_path.endswith('.csv'):
+            df = pd.read_csv(file_path)
+            data = df.values
+        else:
+            print("Expected CSV or NPY data file")
+            return None
+        print(f"Loaded data from {file_path}")
+    except Exception as e:
+        print(f"Failed to load data from {file_path}: {e}")
+        return None
+    
+    min, max = np.min(data, axis=0), np.max(data, axis=0)
+    range = max - min
+    mean, std = np.mean(data, axis=0), np.std(data, axis=0)
+    stats = {
+        'min': min,
+        'max': max,
+        'range': range,
+        'mean': mean,
+        'std': std
+    }
+    return stats
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('file_path', type=str)
+    parser.add_argument('--stats', action='store_true', default=False)
     args = parser.parse_args()
 
     distribution, percents, shape = get_class_distribution(args.file_path)
     print(f"Class distribution in {args.file_path}: {distribution}, {percents}")
     print(f"Total samples:", shape[0])
+    if args.stats:
+        stats = get_stats(args.file_path)
+        print(f"Dataset stats:")
+        for key, value in stats.items():
+            print(f"{key}: {value}")
 
 
 if __name__ == '__main__':

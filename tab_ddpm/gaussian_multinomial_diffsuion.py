@@ -6,6 +6,7 @@ and https://github.com/ehoogeboom/multinomial_diffusion
 import torch.nn.functional as F
 import torch
 import math
+import copy
 
 import numpy as np
 from .utils import *
@@ -71,7 +72,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             multinomial_loss_type='vb_stochastic',
             parametrization='x0',
             scheduler='cosine',
-            device=torch.device('cpu')
+            device=torch.device('cpu'),
+            cfg_rate=None
         ):
 
         super(GaussianMultinomialDiffusion, self).__init__()
@@ -101,6 +103,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         self.num_timesteps = num_timesteps
         self.parametrization = parametrization
         self.scheduler = scheduler
+        self.cfg_rate = cfg_rate
 
         alphas = 1. - get_named_beta_schedule(scheduler, num_timesteps)
         alphas = torch.tensor(alphas.astype('float64'))
@@ -607,10 +610,19 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         
         x_in = torch.cat([x_num_t, log_x_cat_t], dim=1)
 
+        # To implement CFG, drop y randomly in the diffusion loss functions
+        drop_prob = getattr(self, 'cfg_rate', 0.0)
+        # Make shallow copy of model arguments to avoid affecting original dictionary
+        model_kwargs = copy.copy(out_dict)
+        if 'y' in model_kwargs and drop_prob > 0.0:
+            if torch.rand(1).item() < drop_prob:
+                model_kwargs['y'] = None
+
         model_out = self._denoise_fn(
             x_in,
             t,
-            **out_dict
+            #**out_dict
+            **model_kwargs
         )
 
         model_out_num = model_out[:, :self.num_numerical_features]
@@ -883,7 +895,17 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         return out
 
     @torch.no_grad()
-    def sample_ddim(self, num_samples, y_dist=None, y_values=None):
+    def _denoise_with_guidance(self, inputs, t, out_dict, guidance_scale=0.0):
+        if guidance_scale and 'y' in out_dict and out_dict['y'] is not None:
+            model_out_cond = self._denoise_fn(inputs, t, **out_dict)
+            uncond_dict = dict(out_dict)
+            uncond_dict['y'] = None
+            model_out_uncond = self._denoise_fn(inputs, t, **uncond_dict)
+            return model_out_uncond + guidance_scale * (model_out_cond - model_out_uncond)
+        return self._denoise_fn(inputs, t, **out_dict)
+
+    @torch.no_grad()
+    def sample_ddim(self, num_samples, y_dist=None, y_values=None, guidance_scale=0.0):
         b = num_samples
         device = self.log_alpha.device
         z_norm = torch.randn((b, self.num_numerical_features), device=device)
@@ -908,10 +930,13 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         for i in reversed(range(0, self.num_timesteps)):
             print(f'Sample timestep {i:4d}', end='\r')
             t = torch.full((b,), i, device=device, dtype=torch.long)
-            model_out = self._denoise_fn(
+            # Old code (direct denoiser call, no guidance):
+            # model_out = self._denoise_fn(torch.cat([z_norm, log_z], dim=1).float(), t, **out_dict)
+            model_out = self._denoise_with_guidance(
                 torch.cat([z_norm, log_z], dim=1).float(),
                 t,
-                **out_dict
+                out_dict,
+                guidance_scale=guidance_scale
             )
             model_out_num = model_out[:, :self.num_numerical_features]
             model_out_cat = model_out[:, self.num_numerical_features:]
@@ -929,7 +954,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
 
     @torch.no_grad()
-    def sample(self, num_samples, y_dist=None, y_values=None):
+    def sample(self, num_samples, y_dist=None, y_values=None, guidance_scale=0.0):
         b = num_samples
         device = self.log_alpha.device
         z_norm = torch.randn((b, self.num_numerical_features), device=device)
@@ -954,10 +979,13 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         for i in reversed(range(0, self.num_timesteps)):
             print(f'Sample timestep {i:4d}', end='\r')
             t = torch.full((b,), i, device=device, dtype=torch.long)
-            model_out = self._denoise_fn(
+            # Old code (direct denoiser call, no guidance):
+            # model_out = self._denoise_fn(torch.cat([z_norm, log_z], dim=1).float(), t, **out_dict)
+            model_out = self._denoise_with_guidance(
                 torch.cat([z_norm, log_z], dim=1).float(),
                 t,
-                **out_dict
+                out_dict,
+                guidance_scale=guidance_scale
             )
             model_out_num = model_out[:, :self.num_numerical_features]
             model_out_cat = model_out[:, self.num_numerical_features:]
@@ -975,7 +1003,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
     
     
     # pass in y_dist for discrete conditioning and y_values for continuous conditioning
-    def sample_all(self, num_samples, batch_size, y_dist=None, y_values=None, ddim=False):
+    def sample_all(self, num_samples, batch_size, y_dist=None, y_values=None, ddim=False, guidance_scale=0.0):
         if ddim:
             print('Sample using DDIM.')
             sample_fn = self.sample_ddim
@@ -992,9 +1020,9 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             if y_values is not None:
                 indices = torch.randint(0, y_values.shape[0], (current_batch,), device=y_values.device)
                 y_batch = y_values[indices]
-                sample, out_dict = sample_fn(current_batch, y_values=y_batch)
+                sample, out_dict = sample_fn(current_batch, y_values=y_batch, guidance_scale=guidance_scale)
             else:
-                sample, out_dict = sample_fn(current_batch, y_dist)
+                sample, out_dict = sample_fn(current_batch, y_dist, guidance_scale=guidance_scale)
             mask_nan = torch.any(sample.isnan(), dim=1)
             sample = sample[~mask_nan]
             out_dict['y'] = out_dict['y'][~mask_nan]

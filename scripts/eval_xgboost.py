@@ -38,13 +38,13 @@ def train_xgboost(
         X_num_real, X_cat_real, y_real, X_num_val, X_cat_val, y_val = read_changed_val(real_data_path, val_size=0.2, random_state=seed, target_prefix=target)
 
     X = None
-    print("running training of xgboost classifier...")
     print('-'*100)
     if eval_type == 'merged':
         print('loading merged data...')
         if not change_val:
              X_num_real, X_cat_real, y_real = read_pure_data(real_data_path, target_prefix=target)
         X_num_fake, X_cat_fake, y_fake = read_pure_data(synthetic_data_path)
+        print(y_real.shape, y_fake.shape)
 
         y = np.concatenate([y_real, y_fake], axis=0)
 
@@ -118,7 +118,6 @@ def train_xgboost(
     pprint(xgboost_config, width=100)
     print('-'*100)
     
-    print("Regression dataset:", D.is_regression)
     if D.is_regression:
         eval_metric = 'rmse'
         model = XGBRegressor(
@@ -127,6 +126,7 @@ def train_xgboost(
             random_state=seed
         )
         predict = model.predict
+        print("running training of xgboost regressor...")
     else:
         objective = "multi:softprob" if D.is_multiclass else "binary:logistic"
         # for binary classification, can set as error, logloss (probabilistic measure) or auc (for ranking performance)
@@ -142,6 +142,7 @@ def train_xgboost(
             if D.is_multiclass
             else lambda x: model.predict_proba(x)[:, 1]
         )
+        print("running training of xgboost classifier...")
 
     model.fit(
         X['train'], D.y['train'],

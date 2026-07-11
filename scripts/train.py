@@ -7,6 +7,7 @@ from tab_ddpm import GaussianMultinomialDiffusion
 from utils_train import get_model, make_dataset, update_ema
 import lib
 import pandas as pd
+import random
 
 class Trainer:
     def __init__(self, diffusion, train_iter, lr, weight_decay, steps, device=torch.device('cuda:1')):
@@ -34,7 +35,10 @@ class Trainer:
     def _run_step(self, x, out_dict):
         x = x.to(self.device)
         for k in out_dict:
-            out_dict[k] = out_dict[k].long().to(self.device)
+            if self.diffusion._denoise_fn.num_classes == 0 and self.diffusion._denoise_fn.is_y_cond:
+                out_dict[k] = out_dict[k].float().to(self.device)
+            else:
+                out_dict[k] = out_dict[k].long().to(self.device)
         self.optimizer.zero_grad()
         loss_multi, loss_gauss = self.diffusion.mixed_loss(x, out_dict)
         loss = loss_multi + loss_gauss
@@ -91,7 +95,8 @@ def train(
     device = torch.device('cuda:1'),
     seed = 0,
     change_val = False,
-    use_risk_variable = False
+    use_risk_variable = False,
+    cfg_rate = 0.0
 ):
     real_data_path = os.path.normpath(real_data_path)
     parent_dir = os.path.normpath(parent_dir)
@@ -131,7 +136,6 @@ def train(
     # train_loader = lib.prepare_beton_loader(dataset, split='train', batch_size=batch_size)
     train_loader = lib.prepare_fast_dataloader(dataset, split='train', batch_size=batch_size)
 
-
     diffusion = GaussianMultinomialDiffusion(
         num_classes=K,
         num_numerical_features=num_numerical_features,
@@ -139,13 +143,16 @@ def train(
         gaussian_loss_type=gaussian_loss_type,
         num_timesteps=num_timesteps,
         scheduler=scheduler,
-        device=device
+        device=device,
+        cfg_rate=cfg_rate
     )
     diffusion.to(device)
     diffusion.train()
 
     epochs = steps * batch_size // len(dataset.X_num['train']) + 1
     print(f"Training for {epochs} epochs ({steps} steps, {batch_size} batch size)")
+    if cfg_rate > 0.0:
+        print(f"Classifier free guidance with \"dropout\" rate: {cfg_rate}")
     
     trainer = Trainer(
         diffusion,
@@ -155,6 +162,7 @@ def train(
         steps=steps,
         device=device
     )
+    print("Created trainer and starting loop")
     trainer.run_loop()
 
     trainer.loss_history.to_csv(os.path.join(parent_dir, 'loss.csv'), index=False)

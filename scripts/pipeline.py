@@ -69,7 +69,8 @@ def main():
             num_numerical_features=raw_config['num_numerical_features'],
             device=device,
             change_val=args.change_val,
-            use_risk_variable=raw_config.get('risk_conditioning', False)
+            use_risk_variable=raw_config.get('risk_conditioning', False),
+            # cfg_rate = raw_config['train']['main'].get('cfg_rate', 0.0)
         )
     if args.sample:
         sample(
@@ -89,7 +90,8 @@ def main():
             #seed=random.randint(0, 10**6),
             change_val=args.change_val,
             append=raw_config['sample'].get('append', False),
-            use_risk_variable=raw_config.get('risk_conditioning', False)
+            use_risk_variable=raw_config.get('risk_conditioning', False),
+            guidance_scale = raw_config['sample'].get('guidance_scale', 0.0)
         )
     elif args.sample_1:
         sample_1_class(

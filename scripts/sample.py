@@ -35,7 +35,8 @@ def sample(
     seed = 0,
     change_val = False,
     append = False,
-    use_risk_variable = False
+    use_risk_variable = False,
+    guidance_scale = 0.0
 ):
     zero.improve_reproducibility(seed)
     print("Sampling with seed", seed)
@@ -72,19 +73,21 @@ def sample(
         K,
         num_numerical_features=num_numerical_features_,
         denoise_fn=model, num_timesteps=num_timesteps, 
-        gaussian_loss_type=gaussian_loss_type, scheduler=scheduler, device=device
+        gaussian_loss_type=gaussian_loss_type, scheduler=scheduler, device=device,
+        cfg_rate=guidance_scale
     )
-
+    if guidance_scale > 0.0:
+        print("Sampling with guidance scale", guidance_scale)
     diffusion.to(device)
     diffusion.eval()
     
     # sampling with continuous risk conditioning
-    if model_params['num_classes'] == 0 and model_params['is_y_cond']:
+    if model_params['is_y_cond'] and D.is_regression:
         print("Sampling on continuous variable.")
         y_values = torch.from_numpy(D.y['train']).float()
         if y_values.dim() == 1:
             y_values = y_values.unsqueeze(-1)
-        x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, y_values=y_values, ddim=False)
+        x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, y_values=y_values, ddim=False, guidance_scale=guidance_scale)
     else:
         # discrete class sampling
         labels, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
@@ -102,7 +105,7 @@ def sample(
                 distrib = torch.zeros_like(empirical_class_dist)
                 distrib[i] = 1
                 num_samples = val_major - empirical_class_dist[i].item()
-                x_temp, y_temp = diffusion.sample_all(num_samples, batch_size, y_dist=distrib.float(), ddim=False)
+                x_temp, y_temp = diffusion.sample_all(num_samples, batch_size, y_dist=distrib.float(), ddim=False, guidance_scale=guidance_scale)
                 x_gen.append(x_temp)
                 y_gen.append(y_temp)
             
@@ -110,7 +113,7 @@ def sample(
             y_gen = torch.cat(y_gen, dim=0)
 
         else:
-            x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, y_dist=empirical_class_dist.float(), ddim=False)
+            x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, y_dist=empirical_class_dist.float(), ddim=False, guidance_scale=guidance_scale)
 
 
     # try:

@@ -239,7 +239,16 @@ def normalize(
 
 def cat_process_nans(X: ArrayDict, policy: Optional[CatNanPolicy]) -> ArrayDict:
     assert X is not None
-    nan_masks = {k: v == CAT_MISSING_VALUE for k, v in X.items()}
+    # nan_masks = {k: v == CAT_MISSING_VALUE for k, v in X.items()}
+    # Safe comparison: handle case where arrays are numeric (returns scalar False)
+    nan_masks = {}
+    for k, v in X.items():
+        mask = v == CAT_MISSING_VALUE
+        # Ensure mask is always an array, not a scalar bool
+        if isinstance(mask, bool):
+            mask = np.zeros_like(v, dtype=bool)
+        nan_masks[k] = mask
+        
     if any(x.any() for x in nan_masks.values()):  # type: ignore[code]
         if policy is None:
             X_new = X
