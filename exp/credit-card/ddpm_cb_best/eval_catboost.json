@@ -5,22 +5,22 @@
             "acc-mean": 0.9995,
             "acc-std": 0.0,
             "f1-count": 50.0,
-            "f1-mean": 0.9215,
-            "f1-std": 0.0038,
+            "f1-mean": 0.9236,
+            "f1-std": 0.0047,
             "roc_auc-count": 50.0,
-            "roc_auc-mean": 0.9805,
-            "roc_auc-std": 0.0066
+            "roc_auc-mean": 0.9841,
+            "roc_auc-std": 0.0054
         },
         "test": {
             "acc-count": 50.0,
             "acc-mean": 0.9996,
             "acc-std": 0.0,
             "f1-count": 50.0,
-            "f1-mean": 0.9365,
-            "f1-std": 0.0056,
+            "f1-mean": 0.9411,
+            "f1-std": 0.0045,
             "roc_auc-count": 50.0,
-            "roc_auc-mean": 0.9732,
-            "roc_auc-std": 0.0046
+            "roc_auc-mean": 0.972,
+            "roc_auc-std": 0.0027
         }
     },
     "real": {

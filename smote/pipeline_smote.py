@@ -38,6 +38,7 @@ def main():
             real_data_path=raw_config['real_data_path'],
             **raw_config['smote_params'],
             seed=raw_config['seed'],
+            use_risk_variable=raw_config.get('risk_conditioning', False),
             change_val=args.change_val
         )
 

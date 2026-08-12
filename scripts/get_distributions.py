@@ -3,39 +3,7 @@ import numpy as np
 import pandas as pd
 import argparse
 
-def get_distributions(diffusion, D, batch_size, num_samples, disbalance, fixed_class=None):
-    all_samples = []
-    all_labels = []
-    num_generated = 0
-    while num_generated < num_samples:
-        current_batch_size = min(batch_size, num_samples - num_generated)
-        samples = diffusion.sample(current_batch_size, device=diffusion.device)
-        samples_np = samples.cpu().numpy()
-        if fixed_class is not None:
-            class_indices = np.where(samples_np[:, -1] == fixed_class)[0]
-            samples_np = samples_np[class_indices]
-        all_samples.append(samples_np[:, :-1])
-        all_labels.append(samples_np[:, -1])
-        num_generated += len(samples_np)
-    
-    all_samples = np.vstack(all_samples)
-    all_labels = np.hstack(all_labels)
-
-    if disbalance is not None and fixed_class is None:
-        class_counts = np.bincount(all_labels.astype(int))
-        total_count = len(all_labels)
-        class_ratios = class_counts / total_count
-        desired_ratios = disbalance
-        weights = desired_ratios / class_ratios
-        sample_weights = weights[all_labels.astype(int)]
-        sample_weights /= sample_weights.sum()
-        indices_to_sample = np.random.choice(len(all_labels), size=num_samples, replace=True, p=sample_weights)
-        all_samples = all_samples[indices_to_sample]
-        all_labels = all_labels[indices_to_sample]
-
-    return all_samples, all_labels
-
-def get_class_distribution(file_path):
+def get_risk_distribution(file_path, labels_col=None):
     try:
         if file_path.endswith('.npy'):
             data = np.load(file_path, allow_pickle=True)
@@ -51,7 +19,38 @@ def get_class_distribution(file_path):
         return None
 
     if len(data.shape) > 1:
-        labels = data[:, -1]
+        if labels_col and file_path.endswith('.csv'):
+            labels = df[labels_col]
+        else:
+            labels = data[:, -1]
+    else:
+        labels = data
+    # group risk labels into bins of 0.1 and report quantities in each bin
+    df = pd.DataFrame({'risk': labels})
+    df['risk_bin'] = pd.cut(df['risk'], bins=np.arange(0, 1.1, 0.1), right=False)
+
+    return df['risk_bin'].value_counts().sort_index().to_dict()
+
+def get_class_distribution(file_path, labels_col=None):
+    try:
+        if file_path.endswith('.npy'):
+            data = np.load(file_path, allow_pickle=True)
+        elif file_path.endswith('.csv'):
+            df = pd.read_csv(file_path)
+            data = df.values
+        else:
+            print("Expected CSV or NPY data file")
+            return None
+        print(f"Loaded data from {file_path}")
+    except Exception as e:
+        print(f"Failed to load data from {file_path}: {e}")
+        return None
+
+    if len(data.shape) > 1:
+        if labels_col and file_path.endswith('.csv'):
+            labels = df[labels_col]
+        else:
+            labels = data[:, -1]
     else:
         labels = data
     unique, counts = np.unique(labels, return_counts=True)
@@ -60,13 +59,15 @@ def get_class_distribution(file_path):
     return distribution, percents, data.shape
 
 
-def get_stats(file_path):
+def get_stats(file_path, labels_col=None):
     try:
         if file_path.endswith('.npy'):
             data = np.load(file_path, allow_pickle=True)
         elif file_path.endswith('.csv'):
             df = pd.read_csv(file_path)
             data = df.values
+            if labels_col and len(data) > 1:
+                data = df[labels_col]
         else:
             print("Expected CSV or NPY data file")
             return None
@@ -88,20 +89,56 @@ def get_stats(file_path):
     return stats
 
 
+def check_for_null(file_path):
+    try:
+        if file_path.endswith('.npy'):
+            data = np.load(file_path, allow_pickle=True)
+        elif file_path.endswith('.csv'):
+            df = pd.read_csv(file_path)
+            data = df.values
+        else:
+            print("Expected CSV or NPY data file")
+            return None
+        print(f"Loaded data from {file_path}")
+    except Exception as e:
+        print(f"Failed to load data from {file_path}: {e}")
+        return None
+    has_null = pd.isna(data).any()
+    if 'num' in file_path:
+        print(np.isnan(data).any())
+        print(np.isinf(data).any())
+        print(np.nanmax(data))
+        print(np.nanmin(data))
+    elif 'cat' in file_path:
+        print((data == None).any())
+    print(f"Data in {file_path} contains NaN values: {has_null}")
+    return has_null
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('file_path', type=str)
+    parser.add_argument('--no_distribution', action='store_true', default=False)
+    parser.add_argument('--labels_col', type=str, default=None)
     parser.add_argument('--stats', action='store_true', default=False)
+    parser.add_argument('--nan', action='store_true', default=False)
+    parser.add_argument('--risk', action='store_true', default=False)
     args = parser.parse_args()
 
-    distribution, percents, shape = get_class_distribution(args.file_path)
-    print(f"Class distribution in {args.file_path}: {distribution}, {percents}")
-    print(f"Total samples:", shape[0])
+    if not args.no_distribution:
+        distribution, percents, shape = get_class_distribution(args.file_path, labels_col=args.labels_col)
+        print(f"Class distribution in {args.file_path}: {distribution}, {percents}")
+        print(f"Total samples:", shape[0])
     if args.stats:
-        stats = get_stats(args.file_path)
+        stats = get_stats(args.file_path, labels_col=args.labels_col)
         print(f"Dataset stats:")
         for key, value in stats.items():
             print(f"{key}: {value}")
+    if args.nan:
+        check_for_null(args.file_path)
+    if args.risk:
+        risk_bins = get_risk_distribution(args.file_path, labels_col=None)
+        print(f"Risk distribution in {args.file_path}:\n{risk_bins}")
 
 
 if __name__ == '__main__':

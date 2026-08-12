@@ -29,7 +29,9 @@ def eval_seeds(
     n_datasets=1,
     dump=True,
     change_val=False,
-    log_results=False
+    log_results=False,
+    convert_class=False,
+    plot=False
 ):
 
     metrics_seeds_report = lib.SeedsMetricsReport()
@@ -87,35 +89,38 @@ def eval_seeds(
                     T_dict["normalization"] = None
                     T_dict["cat_encoding"] = None
                     metric_report, model_results, eval_metric = train_xgboost(
-                        # parent_dir=temp_config['parent_dir'],
+                        #parent_dir=temp_config['parent_dir'],
                         parent_dir=parent_dir,
                         real_data_path=temp_config['real_data_path'],
                         eval_type=eval_type,
                         T_dict=T_dict,
                         seed=seed,
                         change_val=change_val,
-                        risk=temp_config.get('risk_conditioning', False)
+                        risk=temp_config.get('risk_conditioning', False),
+                        convert_to_class=convert_class
                     )
                     model_curves.append(model_results['validation_0'][eval_metric])
 
                 metrics_seeds_report.add_report(metric_report)
             
-            if model_type == "xgboost":
-                plt.figure(figsize=(8,6))
-                plt.xlabel("Boosting Round")
-                plt.ylabel(eval_metric)
-                plt.title("XGBoost Classifier Training Curve")
-                for i, curve in enumerate(model_curves):
-                    plt.plot(range(1, len(curve)+1), curve, label=f'Validation {i+1}')
-                fig_path = f"{parent_dir}/training_plots/xgboost_curve_ds{sample_seed}.png"
-                plt.legend()
-                plt.savefig(fig_path)
-                print(f"Saved training plot to {fig_path}")
+            if plot:
+                if model_type == "xgboost":
+                    plt.figure(figsize=(8,6))
+                    plt.xlabel("Boosting Round")
+                    plt.ylabel(eval_metric)
+                    plt.title("XGBoost Classifier Training Curve")
+                    for i, curve in enumerate(model_curves):
+                        plt.plot(range(1, len(curve)+1), curve, label=f'Validation {i+1}')
+                    fig_path = f"{parent_dir}/training_plots/xgboost_curve_ds{sample_seed}.png"
+                    plt.legend()
+                    plt.savefig(fig_path)
+                    print(f"Saved training plot to {fig_path}")
 
     metrics_seeds_report.get_mean_std()
     res = metrics_seeds_report.print_result()
     if log_results:
         with open(f"eval_results.txt", "a") as file:
+            file.write(f"Evaluation on {eval_type} data from {parent_dir} using {model_type}\n")
             file.write(str(res['val']))
             file.write("\n")
             file.write(str(res['test']))
@@ -145,6 +150,8 @@ def main():
     parser.add_argument('--no_dump', action='store_false',  default=True)
     parser.add_argument('--change_val', action='store_true', default=False)
     parser.add_argument('--log_results', action='store_true', default=False)
+    parser.add_argument('--classification', action='store_true', default=False)
+    parser.add_argument('--plot', action='store_true', default=False)
 
     args = parser.parse_args()
     raw_config = lib.load_config(args.config)
@@ -157,7 +164,9 @@ def main():
         n_datasets=args.n_datasets,
         dump=args.no_dump,
         change_val=args.change_val,
-        log_results=args.log_results
+        log_results=args.log_results,
+        convert_class=args.classification,
+        plot=args.plot
     )
 
 if __name__ == '__main__':

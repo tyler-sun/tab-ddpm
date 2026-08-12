@@ -29,10 +29,11 @@ gaussian_loss_type = "mse"
 scheduler = "cosine"
 
 [train.main]
-steps = 20000
+steps = 30000
 lr = 0.0005306160757129948
 weight_decay = 0.0
 batch_size = 4096
+cfg_rate = 0.0
 
 [train.T]
 seed = 0
@@ -44,13 +45,21 @@ cat_encoding = "__none__"
 y_policy = "default"
 
 [sample]
-num_samples = 10000
-batch_size = 10000
+num_samples = 320
+batch_size = 100
 append = false
 limit_filter = 492
 boundary_filter = false
 classifier = "catboost"
 seed = 0
+y_conditional = [
+    0.8,
+]
+y_cond_weights = [
+    1,
+]
+y_range = false
+guidance_scale = 0.5
 
 [eval.type]
 eval_model = "xgboost"

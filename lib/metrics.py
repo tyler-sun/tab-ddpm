@@ -18,7 +18,7 @@ class MetricsReport:
     def __init__(self, report: dict, task_type: TaskType):
         self._res = {k: {} for k in report.keys()}
         if task_type in (TaskType.BINCLASS, TaskType.MULTICLASS):
-            self._metrics_names = ["acc", "f1"]
+            self._metrics_names = ["acc", "f1", "precision", "recall"]
             for k in report.keys():
                 self._res[k]["acc"] = report[k]["accuracy"]
                 self._res[k]["f1"] = report[k]["macro avg"]["f1-score"]
@@ -29,8 +29,8 @@ class MetricsReport:
                     self._metrics_names.append("roc_auc")
                     self._res[k]["pr_auc"] = report[k]["pr_auc"]
                     self._metrics_names.append("pr_auc")
-                    # self._res[k]["peak-f1"] = max(report[k][f"{i}"]["f1-score"] for i in range(2))
-                    # self._metrics_names.append("peak-f1")
+                    self._res[k]["balanced_acc"] = report[k]["balanced_acc"]
+                    self._metrics_names.append("balanced_acc")
 
         elif task_type == TaskType.REGRESSION:
             self._metrics_names = ["r2", "rmse"]
@@ -159,6 +159,7 @@ def calculate_metrics(
         result = cast(
             Dict[str, Any], skm.classification_report(y_true, labels, output_dict=True)
         )
+        result['balanced_acc'] = skm.balanced_accuracy_score(y_true, labels)
         if task_type == TaskType.BINCLASS:
             result['roc_auc'] = skm.roc_auc_score(y_true, probs)
             # PR-AUC (average precision) for binary classification

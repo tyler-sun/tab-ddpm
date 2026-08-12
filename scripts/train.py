@@ -7,7 +7,7 @@ from tab_ddpm import GaussianMultinomialDiffusion
 from utils_train import get_model, make_dataset, update_ema
 import lib
 import pandas as pd
-import random
+import sys
 
 class Trainer:
     def __init__(self, diffusion, train_iter, lr, weight_decay, steps, device=torch.device('cuda:1')):
@@ -44,6 +44,10 @@ class Trainer:
         loss = loss_multi + loss_gauss
         loss.backward()
         self.optimizer.step()
+
+        if torch.isnan(loss):
+            print("NaN loss detected")
+            sys.exit(42)
 
         return loss_multi, loss_gauss
 

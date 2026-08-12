@@ -81,29 +81,34 @@ def objective(trial):
     trial.set_user_attr("config", base_config)
 
     lib.dump_config(base_config, exps_path / 'config.toml')
+    try:
+        subprocess.run(['python3.9', f'{pipeline}', '--config', f'{exps_path / "config.toml"}', '--train', '--change_val'], check=True)
 
-    subprocess.run(['python3.9', f'{pipeline}', '--config', f'{exps_path / "config.toml"}', '--train', '--change_val'], check=True)
+        n_datasets = 5
+        score = 0.0
 
-    n_datasets = 5
-    score = 0.0
+        for sample_seed in range(n_datasets):
+            base_config['sample']['seed'] = sample_seed
+            lib.dump_config(base_config, exps_path / 'config.toml')
+            
+            subprocess.run(['python3.9', f'{pipeline}', '--config', f'{exps_path / "config.toml"}', '--sample', '--eval', '--change_val'], check=True)
 
-    for sample_seed in range(n_datasets):
-        base_config['sample']['seed'] = sample_seed
-        lib.dump_config(base_config, exps_path / 'config.toml')
-        
-        subprocess.run(['python3.9', f'{pipeline}', '--config', f'{exps_path / "config.toml"}', '--sample', '--eval', '--change_val'], check=True)
+            report_path = str(Path(base_config['parent_dir']) / f'results_{args.eval_model}.json')
+            report = lib.load_json(report_path)
 
-        report_path = str(Path(base_config['parent_dir']) / f'results_{args.eval_model}.json')
-        report = lib.load_json(report_path)
+            if 'r2' in report['metrics']['val']:
+                score += report['metrics']['val']['r2']
+            else:
+                score += report['metrics']['val']['macro avg']['f1-score']
 
-        if 'r2' in report['metrics']['val']:
-            score += report['metrics']['val']['r2']
+        shutil.rmtree(exps_path / f"{trial.number}")
+
+        return score / n_datasets
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 42:
+            raise optuna.TrialPruned()
         else:
-            score += report['metrics']['val']['macro avg']['f1-score']
-
-    shutil.rmtree(exps_path / f"{trial.number}")
-
-    return score / n_datasets
+            raise RuntimeError("Error during tuning")
 
 study = optuna.create_study(
     direction='maximize',

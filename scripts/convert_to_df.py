@@ -99,8 +99,9 @@ def main():
         file_path=args.file_path
     )
     if df is not None:
-        df.to_csv(f'{args.ds_name}_{args.sampling_method}_{args.eval_type}_{args.model_type}_{"normalized" if args.normalized else "unnormalized"}.csv', index=False)
-        print("Dataframe saved to CSV.")
+        save_dir = f'{args.ds_name}_{args.sampling_method}_{args.eval_type}_{args.model_type}_{"normalized" if args.normalized else "unnormalized"}.csv'
+        df.to_csv(save_dir, index=False)
+        print(f"Dataframe saved to CSV at {save_dir}.")
 
 
 if __name__ == '__main__':

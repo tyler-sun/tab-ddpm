@@ -39,6 +39,7 @@ def main():
             real_data_path=raw_config['real_data_path'],
             train_params=raw_config['train_params'],
             change_val=args.change_val,
+            use_risk_variable=raw_config.get('risk_conditioning', False),
             device=raw_config['device']
         )
     if args.sample:
@@ -62,6 +63,7 @@ def main():
                 eval_type=raw_config['eval']['type']['eval_type'],
                 T_dict=raw_config['eval']['T'],
                 seed=raw_config['seed'],
+                use_risk_variable=raw_config.get('risk_conditioning', False),
                 change_val=args.change_val
             )
         # elif raw_config['eval']['type']['eval_model'] == 'mlp':

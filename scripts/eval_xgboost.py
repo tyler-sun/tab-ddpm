@@ -1,5 +1,13 @@
 from xgboost import XGBClassifier, XGBRegressor
-from sklearn.metrics import classification_report, r2_score
+from sklearn.metrics import (
+    classification_report,
+    r2_score,
+    confusion_matrix,
+    precision_recall_curve,
+    roc_auc_score,
+    average_precision_score,
+    balanced_accuracy_score,
+)
 from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import os
@@ -10,6 +18,34 @@ from pathlib import Path
 import lib
 from pprint import pprint
 from lib import concat_features, read_pure_data, get_xgboost_config, read_changed_val
+from get_distributions import get_class_distribution
+
+
+def _select_best_threshold(y_true, probs):
+    precision, recall, thresholds = precision_recall_curve(y_true, probs)
+    if precision.size == 0 or recall.size == 0 or thresholds.size == 0:
+        return 0.5
+
+    f1_scores = 2 * (precision * recall) / (precision + recall + 1e-12)
+    if len(thresholds) == len(f1_scores) - 1:
+        f1_scores = f1_scores[:-1]
+        threshold_candidates = thresholds
+    else:
+        threshold_candidates = thresholds
+
+    best_idx = int(np.nanargmax(f1_scores))
+    if best_idx >= len(threshold_candidates):
+        return 0.5
+    return float(threshold_candidates[best_idx])
+
+
+def _build_thresholded_metrics(y_true, probs, threshold):
+    y_pred = (probs >= threshold).astype(np.int64)
+    report = classification_report(y_true, y_pred, output_dict=True)
+    report['balanced_acc'] = balanced_accuracy_score(y_true, y_pred)
+    report['roc_auc'] = roc_auc_score(y_true, probs)
+    report['pr_auc'] = average_precision_score(y_true, probs)
+    return report
 
 def train_xgboost(
     parent_dir,
@@ -20,7 +56,8 @@ def train_xgboost(
     params = None,
     change_val = True,
     device = None, # dummy
-    risk = False
+    risk = False,
+    convert_to_class = False
 ):
     zero.improve_reproducibility(seed)
     if eval_type != "real":
@@ -32,6 +69,7 @@ def train_xgboost(
         target = 'r'
     else:
         target = 'y'
+    # target = 'y'
     print(risk, target)
     
     if change_val:
@@ -43,8 +81,16 @@ def train_xgboost(
         print('loading merged data...')
         if not change_val:
              X_num_real, X_cat_real, y_real = read_pure_data(real_data_path, target_prefix=target)
+        print("synthetic_data_path =", synthetic_data_path)
         X_num_fake, X_cat_fake, y_fake = read_pure_data(synthetic_data_path)
-        print(y_real.shape, y_fake.shape)
+        print("Merging", y_real.shape, y_fake.shape)
+        #print("Synthetic data:", X_cat_fake.dtype, type(X_cat_fake[0,0]))
+        # print("Real data:", X_cat_real.dtype, type(X_cat_real[0,0]))
+        if X_cat_fake is not None:
+            X_cat_fake = np.asarray(X_cat_fake, dtype=np.int64)
+            print(X_cat_fake.dtype)
+        if y_fake.ndim == 2:
+            y_fake= y_fake.squeeze(axis=1)
 
         y = np.concatenate([y_real, y_fake], axis=0)
 
@@ -61,6 +107,7 @@ def train_xgboost(
     elif eval_type == 'synthetic':
         print(f'loading synthetic data: {parent_dir}')
         X_num, X_cat, y = read_pure_data(synthetic_data_path)
+        X_cat = np.asarray(X_cat, dtype=np.int64)
 
     elif eval_type == 'real':
         print('loading real data...')
@@ -75,6 +122,30 @@ def train_xgboost(
         X_num_val, X_cat_val, y_val = read_pure_data(real_data_path, 'val', target_prefix=target)
     X_num_test, X_cat_test, y_test = read_pure_data(real_data_path, 'test', target_prefix=target)
 
+    # convert risk probabilities to binary classification
+    if risk and convert_to_class:
+        # print(Path(real_data_path) / "y_train.npy")
+        # _, percents, _ = get_class_distribution(Path(real_data_path) / "y_train.npy")
+
+        # positive_ratio = float(percents['1.0'].strip('%')) / 100.0
+        positive_ratio = 0.035
+        target_quantile = (1.0 - positive_ratio) * 100
+        r_train_path = Path(real_data_path) / "r_train.npy"
+        r_train = np.load(r_train_path, allow_pickle=True)
+
+        # Compute threshold from the risk scores (r)
+        threshold = np.percentile(r_train, target_quantile)
+
+        print(f"Quantile-Aligned Threshold: {threshold:.4f}")
+        # Binarize risks using the quantile cutoff
+        y = [0 if x < threshold else 1 for x in y]
+        y_val = [0 if x < threshold else 1 for x in y_val]
+        y_test = [0 if x < threshold else 1 for x in y_test]
+
+        # y = [0 if x < 0.5 else 1 for x in y]
+        # y_val = [0 if x < 0.5 else 1 for x in y_val]
+        # y_test = [0 if x < 0.5 else 1 for x in y_test]
+
     D = lib.Dataset(
         {'train': X_num, 'val': X_num_val, 'test': X_num_test} if X_num is not None else None,
         {'train': X_cat, 'val': X_cat_val, 'test': X_cat_test} if X_cat is not None else None,
@@ -83,6 +154,8 @@ def train_xgboost(
         lib.TaskType(info['task_type']),
         info.get('n_classes')
     )
+    if convert_to_class:
+        D.task_type = lib.TaskType('binclass')
 
     D = lib.transform_dataset(D, T, None)
     X = concat_features(D)
@@ -155,24 +228,36 @@ def train_xgboost(
     report = {}
     report['eval_type'] = eval_type
     report['dataset'] = real_data_path
-    report['metrics'] = D.calculate_metrics(predictions,  None if D.is_regression else 'probs')
+
+    if risk and convert_to_class and not D.is_regression:
+        # threshold = _select_best_threshold(D.y['val'], predictions['val'])
+        print(f"Selected validation threshold for binary risk classification: {threshold:.4f}")
+        report['threshold'] = threshold
+        report['metrics'] = {
+            split: _build_thresholded_metrics(
+                D.y[split],
+                predictions[split],
+                threshold,
+            )
+            for split in predictions
+        }
+        # report['threshold'] = 0.5
+        # report['metrics'] = {
+        #     split: _build_thresholded_metrics(
+        #         D.y[split],
+        #         predictions[split],
+        #         0.5,
+        #     )
+        #     for split in predictions
+        # }
+    else:
+        report['metrics'] = D.calculate_metrics(predictions, None if D.is_regression else 'probs')
 
     metrics_report = lib.MetricsReport(report['metrics'], D.task_type)
     metrics_report.print_metrics()
 
     if parent_dir is not None:
         lib.dump_json(report, os.path.join(parent_dir, "results_xgboost.json"))
-
-        # add plot for training progression
-        # epochs = len(model.evals_result()['validation_0'][eval_metric])
-        # iterations = range(1, epochs+1)
-        # plt.plot(iterations, model.evals_result()['validation_0'][eval_metric], label='Validation')
-        # plt.xlabel("Boosting Round")
-        # plt.ylabel(eval_metric)
-        # plt.title("XGBoost Classifier Training Curve")
-        # fig_path = os.path.join(parent_dir, "xgboost_training.png")
-        # plt.savefig(fig_path)
-        # print(f"Saved training plot to {fig_path}")
 
     return metrics_report, model.evals_result(), eval_metric
 

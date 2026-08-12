@@ -2,19 +2,19 @@
     "synthetic": {
         "val": {
             "r2-count": 50.0,
-            "r2-mean": 0.8008,
-            "r2-std": 0.0045,
+            "r2-mean": 0.8027,
+            "r2-std": 0.0067,
             "rmse-count": 50.0,
-            "rmse-mean": 5173.3499,
-            "rmse-std": 58.2643
+            "rmse-mean": 5148.2055,
+            "rmse-std": 87.5064
         },
         "test": {
             "r2-count": 50.0,
-            "r2-mean": 0.7997,
-            "r2-std": 0.0037,
+            "r2-mean": 0.8003,
+            "r2-std": 0.0043,
             "rmse-count": 50.0,
-            "rmse-mean": 4930.1636,
-            "rmse-std": 45.2811
+            "rmse-mean": 4923.1066,
+            "rmse-std": 53.673
         }
     }
 }

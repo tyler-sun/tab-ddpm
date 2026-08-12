@@ -678,7 +678,7 @@ def concat_to_pd(X_num, X_cat, y):
         ], axis=1)
 
 def read_pure_data(path, split='train', target_prefix='y'):
-    print("Training on", os.path.join(path, f'{target_prefix}_{split}.npy'))
+    print("Loading", os.path.join(path, f'{target_prefix}_{split}.npy'))
     y = np.load(os.path.join(path, f'{target_prefix}_{split}.npy'), allow_pickle=True)
     X_num = None
     X_cat = None

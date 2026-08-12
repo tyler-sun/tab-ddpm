@@ -106,6 +106,7 @@ def sample_smote(
     frac_lam_del = 0.0,
     change_val = False,
     save = True,
+    use_risk_variable = False,
     seed = 0
 ):
     lam1 = 0.0 + frac_lam_del / 2
@@ -115,19 +116,23 @@ def sample_smote(
     info = lib.load_json(real_data_path / 'info.json')
     is_regression = info['task_type'] == 'regression'
 
+    target_prefix = 'r' if use_risk_variable else 'y'
+    print("Using SMOTE on", target_prefix, "Regression:", is_regression)
+
     X_num = {}
     X_cat = {}
     y = {}
 
     if change_val:
-        X_num['train'], X_cat['train'], y['train'], X_num['val'], X_cat['val'], y['val'] = lib.read_changed_val(real_data_path)
+        X_num['train'], X_cat['train'], y['train'], X_num['val'], X_cat['val'], y['val'] = lib.read_changed_val(real_data_path, target_prefix=target_prefix)
     else:
-        X_num['train'], X_cat['train'], y['train'] = lib.read_pure_data(real_data_path, 'train')
-        X_num['val'], X_cat['val'], y['val'] = lib.read_pure_data(real_data_path, 'val')
-    X_num['test'], X_cat['test'], y['test'] = lib.read_pure_data(real_data_path, 'test')
+        X_num['train'], X_cat['train'], y['train'] = lib.read_pure_data(real_data_path, 'train', target_prefix=target_prefix)
+        X_num['val'], X_cat['val'], y['val'] = lib.read_pure_data(real_data_path, 'val', target_prefix=target_prefix)
+    X_num['test'], X_cat['test'], y['test'] = lib.read_pure_data(real_data_path, 'test', target_prefix=target_prefix)
 
 
     X = {k: X_num[k] for k in X_num.keys()}
+    original_num_features = X['train'].shape[1]
 
     if is_regression:
         X['train'] = np.concatenate([X["train"], y["train"].reshape(-1, 1)], axis=1, dtype=object)
@@ -135,11 +140,11 @@ def sample_smote(
     
     n_num_features = X['train'].shape[1]
     n_cat_features = X_cat['train'].shape[1] if X_cat['train'] is not None else 0
-    cat_features = list(range(n_num_features, n_num_features+n_cat_features))
+    cat_features = list(range(n_num_features, n_num_features + n_cat_features))
     print(cat_features)
 
-    scaler = MinMaxScaler().fit(X["train"])
-    X["train"] = scaler.transform(X["train"]).astype(object)
+    scaler = MinMaxScaler().fit(X["train"][:, :original_num_features + 1])
+    X["train"] = scaler.transform(X["train"][:, :original_num_features + 1]).astype(object)
 
     if X_cat['train'] is not None:
         for k in X_num.keys():
@@ -170,9 +175,10 @@ def sample_smote(
 
         X_res, y_res = sm.fit_resample(X['train'], y['train'])
         if is_regression:
-            X_res[:, :X_num["train"].shape[1]+1] = scaler.inverse_transform(X_res[:, :X_num["train"].shape[1]+1])
-            y_res = X_res[:, X_num["train"].shape[1]]
-            X_res = np.delete(X_res, [X_num["train"].shape[1]], axis=1)
+            num_cols = original_num_features + 1
+            X_res[:, :num_cols] = scaler.inverse_transform(X_res[:, :num_cols])
+            y_res = X_res[:, original_num_features]
+            X_res = np.delete(X_res, [original_num_features], axis=1)
         else:
             X_res[:, :X_num["train"].shape[1]] = scaler.inverse_transform(X_res[:, :X_num["train"].shape[1]])
             y_res = y_res.astype(int)

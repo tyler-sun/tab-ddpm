@@ -12,16 +12,19 @@ def train_ctabgan(
     real_data_path,
     train_params = {"batch_size": 512},
     change_val=False,
+    use_risk_variable=False,
     device = "cpu"
 ):
     real_data_path = Path(real_data_path)
     parent_dir = Path(parent_dir)
     device = torch.device(device)
 
+    target_prefix = 'r' if use_risk_variable else 'y'
+
     if change_val:
-        X_num_train, X_cat_train, y_train, _, _, _ = lib.read_changed_val(real_data_path)
+        X_num_train, X_cat_train, y_train, _, _, _ = lib.read_changed_val(real_data_path, target_prefix=target_prefix)
     else:
-        X_num_train, X_cat_train, y_train = lib.read_pure_data(real_data_path, 'train')
+        X_num_train, X_cat_train, y_train = lib.read_pure_data(real_data_path, 'train', target_prefix=target_prefix)
     
     X = lib.concat_to_pd(X_num_train, X_cat_train, y_train)
 
